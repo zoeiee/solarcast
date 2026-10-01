@@ -1,0 +1,160 @@
+# SolarCast Configuration
+# Solar Flare Prediction from Active-Region Magnetograms
+
+project:
+  name: "SolarCast"
+  version: "1.0.0"
+  description: "CNN-based solar flare prediction from magnetogram imagery"
+
+# Prediction target
+prediction:
+  task: "binary"  # "binary" or "multiclass"
+  target: "mx_flare"  # Predict M/X-class flare
+  horizon_hours: 24  # Prediction window in hours
+  threshold: 0.5  # Classification threshold
+  positive_label: "M/X Flare"
+  negative_label: "No M/X Flare"
+
+# Data configuration
+data:
+  image_size: 128  # Resize magnetograms to 128x128
+  channels: 1  # Grayscale magnetograms
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  sample_dir: "data/sample"
+  split_strategy: "active_region"  # "active_region" or "temporal"
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  random_seed: 42
+
+# Preprocessing
+preprocessing:
+  clip_range: [-1500, 1500]  # Gauss, clip extreme values
+  normalization: "minmax"  # "minmax", "standard", or "robust"
+  handle_nan: "zero"  # Replace NaN/missing with zero
+  augmentation:
+    enabled: true
+    random_rotation: 15  # Degrees - small rotation preserves physics
+    random_flip_horizontal: true  # Flipping is physically acceptable
+    random_flip_vertical: false  # Vertical flip changes hemisphere context
+    random_crop_scale: [0.9, 1.0]
+    noise_std: 0.01
+
+# Feature extraction (for baseline model)
+features:
+  magnetic_stats:
+    - "mean_field"
+    - "std_field"
+    - "mean_abs_field"
+    - "max_abs_field"
+    - "positive_flux"
+    - "negative_flux"
+    - "total_unsigned_flux"
+    - "net_flux"
+    - "flux_imbalance"
+    - "strong_field_area_ratio"
+    - "gradient_mean"
+    - "gradient_max"
+  strong_field_threshold: 300  # Gauss
+
+# Model configuration
+model:
+  # Custom CNN
+  cnn:
+    name: "SolarCNN"
+    initial_channels: 32
+    num_residual_blocks: 3
+    dropout: 0.3
+    use_batch_norm: true
+    activation: "relu"
+  # Transfer learning comparison
+  transfer:
+    backbone: "resnet18"
+    pretrained: true
+    freeze_backbone: false
+    fine_tune_from_layer: 6
+
+# Training
+training:
+  batch_size: 32
+  epochs: 50
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  optimizer: "adam"
+  scheduler:
+    type: "cosine"  # "cosine", "step", or "plateau"
+    step_size: 10
+    gamma: 0.5
+    patience: 5  # For plateau scheduler
+  early_stopping:
+    enabled: true
+    patience: 10
+    monitor: "val_loss"
+    min_delta: 0.001
+  class_weights:
+    enabled: true
+    method: "inverse_frequency"  # "inverse_frequency" or "manual"
+    manual_weights: [1.0, 5.0]  # [no_flare, flare]
+  focal_loss:
+    enabled: false
+    alpha: 0.75
+    gamma: 2.0
+  seed: 42
+  num_workers: 4
+  pin_memory: true
+  mixed_precision: false
+
+# Evaluation
+evaluation:
+  metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1"
+    - "roc_auc"
+    - "pr_auc"
+    - "tss"  # True Skill Statistic
+    - "hss"  # Heidke Skill Score
+  confusion_matrix: true
+  roc_curve: true
+  precision_recall_curve: true
+  calibration_plot: true
+
+# Explainability
+explainability:
+  method: "gradcam"
+  target_layer: "features.residual_blocks"  # Last conv layer
+  colormap: "jet"
+  overlay_alpha: 0.4
+
+# Inference / API
+inference:
+  model_path: "models/solar_cnn_best.pth"
+  onnx_path: "models/solar_cnn.onnx"
+  use_onnx: false
+  device: "auto"  # "auto", "cuda", "cpu"
+
+# Backend API
+api:
+  host: "0.0.0.0"
+  port: 8000
+  cors_origins:
+    - "http://localhost:3000"
+    - "https://solarcast.vercel.app"
+  max_upload_size_mb: 50
+
+# Frontend
+frontend:
+  api_url: "http://localhost:8000"
+  demo_images:
+    - "data/sample/quiet_001.npy"
+    - "data/sample/flare_001.npy"
+    - "data/sample/quiet_002.npy"
+    - "data/sample/flare_002.npy"
+
+# Logging
+logging:
+  level: "INFO"
+  save_dir: "logs"
+  tensorboard: true
